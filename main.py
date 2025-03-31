@@ -10,6 +10,7 @@ extraction via HTTP requests.
 import requests
 import re
 from bs4 import BeautifulSoup
+from datetime import datetime
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -64,8 +65,16 @@ def clean_html_content_with_linebreaks(html_content):
     return text.strip()
 
 
-def fetch_wordpress_posts(base_url, post_type, per_page=100, page=1):
-  """Fetch posts with WordPress API"""
+def fetch_wordpress_posts(base_url, post_type, per_page=100, page=1, after=None):
+  """Fetch posts with WordPress API
+  
+  Args:
+      base_url (str): Base URL of the WordPress site
+      post_type (str): Type of post to fetch (e.g., 'posts', 'pages')
+      per_page (int, optional): Number of posts per page. Defaults to 100.
+      page (int, optional): Page number to fetch. Defaults to 1.
+      after (str, optional): Fetch posts after this date. Format: YYYY-MM-DD. Defaults to None.
+  """
 
   # Construct the API URL
   api_url = f"{base_url}/wp-json/wp/v2/{post_type}"
@@ -77,8 +86,11 @@ def fetch_wordpress_posts(base_url, post_type, per_page=100, page=1):
     'status': 'publish',
     'orderby': 'date',
     'order': 'desc',
-
   }
+  
+  # Add after parameter if provided
+  if after:
+    params['after'] = after  # WordPress API expects YYYY-MM-DD format
 
   try:
 
@@ -96,14 +108,20 @@ def fetch_wordpress_posts(base_url, post_type, per_page=100, page=1):
     return None, 0
 
 
-def extract_all_posts(base_url, post_type):
-  """Extracts all posts content from all pages"""
+def extract_all_posts(base_url, post_type, after_date=None):
+  """Extracts all posts content from all pages
+  
+  Args:
+      base_url (str): Base URL of the WordPress site
+      post_type (str): Type of post to fetch (e.g., 'posts', 'pages')
+      after_date (str, optional): Fetch posts after this date. Format: YYYY-MM-DD. Defaults to None.
+  """
 
   all_posts_content = []
   page = 1
 
   while True:
-    posts, total_pages = fetch_wordpress_posts(base_url, post_type, page=page)
+    posts, total_pages = fetch_wordpress_posts(base_url, post_type, page=page, after=after_date)
 
     if not posts:
       break;
@@ -184,9 +202,23 @@ def extract():
         
         post_type = request_data['postType']
         base_url = request_data['baseUrl']
+        after_date = None
+        
+        # Check if afterDate parameter is provided
+        if 'afterDate' in request_data:
+            try:
+                # Parse the date to ensure it's valid and convert to YYYY-MM-DD format
+                date_obj = datetime.strptime(request_data['afterDate'], '%Y-%m-%d')
+                after_date = date_obj.strftime('%Y-%m-%d')
+            except ValueError:
+                return jsonify({
+                    "success": False,
+                    "data": None,
+                    "error": "Invalid date format for 'afterDate'. Expected format: YYYY-MM-DD"
+                }), 400
         
         # Extract posts
-        posts = extract_all_posts(base_url=base_url, post_type=post_type)
+        posts = extract_all_posts(base_url=base_url, post_type=post_type, after_date=after_date)
         
         # Return successful response
         return jsonify({
