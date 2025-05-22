@@ -73,7 +73,7 @@ def fetch_wordpress_posts(base_url, post_type, per_page=100, page=1, after=None)
       post_type (str): Type of post to fetch (e.g., 'posts', 'pages')
       per_page (int, optional): Number of posts per page. Defaults to 100.
       page (int, optional): Page number to fetch. Defaults to 1.
-      after (str, optional): Fetch posts after this date. Format: YYYY-MM-DD. Defaults to None.
+      after (str, optional): Fetch posts after this date. Format: YYYY-MM-DDT00:00:00. Defaults to None.
   """
 
   # Construct the API URL
@@ -90,7 +90,7 @@ def fetch_wordpress_posts(base_url, post_type, per_page=100, page=1, after=None)
   
   # Add after parameter if provided
   if after:
-    params['after'] = after  # WordPress API expects YYYY-MM-DD format
+    params['after'] = after  # Using YYYY-MM-DDT00:00:00 format
 
   try:
 
@@ -114,7 +114,7 @@ def extract_all_posts(base_url, post_type, after_date=None):
   Args:
       base_url (str): Base URL of the WordPress site
       post_type (str): Type of post to fetch (e.g., 'posts', 'pages')
-      after_date (str, optional): Fetch posts after this date. Format: YYYY-MM-DD. Defaults to None.
+      after_date (str, optional): Fetch posts after this date. Format: YYYY-MM-DDT00:00:00. Defaults to None.
   """
 
   all_posts_content = []
@@ -129,7 +129,7 @@ def extract_all_posts(base_url, post_type, after_date=None):
     for post in posts:
       post_data = {
         'id': post['id'],
-        'date': post['date'],
+        'date': datetime.fromisoformat(post['date'].replace('Z', '+00:00')).strftime('%Y-%m-%dT%H:%M:%S'),
         'title': clean_html_content(post['title']['rendered']),
         'content': clean_html_content_with_linebreaks(post['content']['rendered'])
       }
@@ -207,14 +207,32 @@ def extract():
         # Check if afterDate parameter is provided
         if 'afterDate' in request_data:
             try:
-                # Parse the date to ensure it's valid and convert to YYYY-MM-DD format
-                date_obj = datetime.strptime(request_data['afterDate'], '%Y-%m-%d')
-                after_date = date_obj.strftime('%Y-%m-%d')
+                # Parse the date to ensure it's valid
+                after_date_str = request_data['afterDate']
+                
+                try:
+                    # Try to parse with various possible formats
+                    if 'T' in after_date_str:
+                        try:
+                            # Try full format with seconds
+                            date_obj = datetime.strptime(after_date_str, '%Y-%m-%dT%H:%M:%S')
+                        except ValueError:
+                            # Try without seconds
+                            date_obj = datetime.strptime(after_date_str, '%Y-%m-%dT%H:%M')
+                    else:
+                        # If only date is provided, add the time part
+                        date_obj = datetime.strptime(after_date_str, '%Y-%m-%d')
+                    
+                    # Always format in YYYY-MM-DDT00:00:00 format for WordPress API
+                    after_date = date_obj.strftime('%Y-%m-%dT00:00:00')
+                except ValueError:
+                    # If parsing fails, raise exception to be caught by outer try-except
+                    raise ValueError("Invalid date format")
             except ValueError:
                 return jsonify({
                     "success": False,
                     "data": None,
-                    "error": "Invalid date format for 'afterDate'. Expected format: YYYY-MM-DD"
+                    "error": "Invalid date format for 'afterDate'. Expected format: YYYY-MM-DDT00:00:00"
                 }), 400
         
         # Extract posts
