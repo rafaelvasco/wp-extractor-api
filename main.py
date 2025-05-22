@@ -73,7 +73,7 @@ def fetch_wordpress_posts(base_url, post_type, per_page=100, page=1, after=None)
       post_type (str): Type of post to fetch (e.g., 'posts', 'pages')
       per_page (int, optional): Number of posts per page. Defaults to 100.
       page (int, optional): Page number to fetch. Defaults to 1.
-      after (str, optional): Fetch posts after this date. Format: YYYY-MM-DDT00:00:00. Defaults to None.
+      after (str, optional): Fetch posts after this date. Format: YYYY-MM-DDT00:00:00 or ISO 8601 (e.g., 2025-04-26T21:32:52.043Z). Defaults to None.
   """
 
   # Construct the API URL
@@ -114,7 +114,7 @@ def extract_all_posts(base_url, post_type, after_date=None):
   Args:
       base_url (str): Base URL of the WordPress site
       post_type (str): Type of post to fetch (e.g., 'posts', 'pages')
-      after_date (str, optional): Fetch posts after this date. Format: YYYY-MM-DDT00:00:00. Defaults to None.
+      after_date (str, optional): Fetch posts after this date. Format: YYYY-MM-DDT00:00:00 or ISO 8601 (e.g., 2025-04-26T21:32:52.043Z). Defaults to None.
   """
 
   all_posts_content = []
@@ -211,14 +211,35 @@ def extract():
                 after_date_str = request_data['afterDate']
                 
                 try:
-                    # Try to parse with various possible formats
+                    # Handle various date formats
                     if 'T' in after_date_str:
-                        try:
-                            # Try full format with seconds
-                            date_obj = datetime.strptime(after_date_str, '%Y-%m-%dT%H:%M:%S')
-                        except ValueError:
-                            # Try without seconds
-                            date_obj = datetime.strptime(after_date_str, '%Y-%m-%dT%H:%M')
+                        # Handle ISO 8601 format with Z (UTC) timezone indicator and possibly milliseconds
+                        if 'Z' in after_date_str:
+                            # Remove the Z and convert to datetime
+                            clean_date_str = after_date_str.replace('Z', '+00:00')
+                            if '.' in clean_date_str:
+                                # Format with milliseconds: 2025-04-26T21:32:52.043+00:00
+                                date_obj = datetime.fromisoformat(clean_date_str)
+                            else:
+                                # Format without milliseconds: 2025-04-26T21:32:52+00:00
+                                date_obj = datetime.fromisoformat(clean_date_str)
+                        else:
+                            try:
+                                # Try standard format with seconds
+                                date_obj = datetime.strptime(after_date_str, '%Y-%m-%dT%H:%M:%S')
+                            except ValueError:
+                                try:
+                                    # Try without seconds
+                                    date_obj = datetime.strptime(after_date_str, '%Y-%m-%dT%H:%M')
+                                except ValueError:
+                                    # Last attempt - try with milliseconds
+                                    if '.' in after_date_str:
+                                        date_parts = after_date_str.split('.')
+                                        base_date = datetime.strptime(date_parts[0], '%Y-%m-%dT%H:%M:%S')
+                                        date_obj = base_date
+                                    else:
+                                        # If all fails, raise to be caught by outer try-except
+                                        raise ValueError("Invalid date format")
                     else:
                         # If only date is provided, add the time part
                         date_obj = datetime.strptime(after_date_str, '%Y-%m-%d')
@@ -232,7 +253,7 @@ def extract():
                 return jsonify({
                     "success": False,
                     "data": None,
-                    "error": "Invalid date format for 'afterDate'. Expected format: YYYY-MM-DDT00:00:00"
+                    "error": "Invalid date format for 'afterDate'. Expected format: YYYY-MM-DD, YYYY-MM-DDT00:00:00, or ISO 8601 format like 2025-04-26T21:32:52.043Z"
                 }), 400
         
         # Extract posts
