@@ -28,12 +28,17 @@ RUN adduser --disabled-password --gecos '' appuser && \
     chown -R appuser:appuser /app
 USER appuser
 
-# Expose port
+# Expose port (only for Flask API, not for workers)
 EXPOSE 5000
 
-# Health check
+# Conditional health check based on service type
+# Workers don't need HTTP health checks
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:5000/health || exit 1
+    CMD if [ "$SERVICE_TYPE" = "worker" ]; then \
+            celery -A celery_app inspect ping -d celery@$HOSTNAME || exit 1; \
+        else \
+            curl -f http://localhost:5000/health || exit 1; \
+        fi
 
 # Conditional command based on SERVICE_TYPE environment variable
 # If SERVICE_TYPE=worker, start Celery worker
