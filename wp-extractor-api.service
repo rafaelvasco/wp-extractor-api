@@ -1,0 +1,17 @@
+[Unit]
+Description=WordPress Extractor API
+After=network.target
+
+[Service]
+Type=exec
+User=www-data
+Group=www-data
+WorkingDirectory=/path/to/your/wp_extractor_api
+Environment=PATH=/path/to/your/venv/bin
+ExecStart=/path/to/your/venv/bin/gunicorn --config gunicorn.conf.py main:app
+ExecReload=/bin/kill -s HUP $MAINPID
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

@@ -3,8 +3,7 @@
 Flask-based API for WordPress content extraction.
 
 This module provides a REST API interface to the extraction functionality
-defined in extractor.py, allowing clients to request WordPress content
-extraction via HTTP requests.
+with both synchronous and asynchronous endpoints for handling long-running requests.
 """
 
 import requests
@@ -14,6 +13,8 @@ from datetime import datetime
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from celery_app import celery_app
+from tasks import extract_wordpress_content
 
 
 # Extraction Methods ===================================================================
@@ -156,13 +157,26 @@ app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
 
+@app.route('/health', methods=['GET'])
+def health_check():
+    """Health check endpoint for monitoring and load balancers."""
+    return jsonify({
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "service": "WordPress Extractor API"
+    }), 200
+
+
 @app.route('/extract', methods=['POST'])
 def extract():
     """
-    Extract WordPress content based on the specified post type.
+    Extract WordPress content synchronously (for small requests).
     
     Expects a JSON payload with a 'postType' and a 'baseUrl'
     Returns a JSON response with extracted content or error message.
+    
+    Note: This endpoint has a timeout limit. For large extractions,
+    use /extract/async instead.
     
     Returns:
         JSON: A response with the following structure:
@@ -274,7 +288,164 @@ def extract():
             "error": str(e)
         }), 500
 
+
+@app.route('/extract/async', methods=['POST'])
+def extract_async():
+    """
+    Start asynchronous WordPress content extraction for long-running requests.
+    
+    Expects a JSON payload with a 'postType' and a 'baseUrl'
+    Returns a task ID that can be used to check progress and get results.
+    
+    Returns:
+        JSON: A response with the following structure:
+            {
+                "success": boolean,
+                "task_id": string,
+                "status": "started",
+                "message": string,
+                "check_url": string
+            }
+    """
+    try:
+        # Get request data
+        request_data = request.get_json()
+        
+        # Validate request data
+        if not request_data:
+            return jsonify({
+                "success": False,
+                "error": "Request is Empty"
+            }), 400
+        
+        if 'postType' not in request_data:
+            return jsonify({
+                "success": False,
+                "error": "Missing 'postType' parameter"
+            }), 400
+            
+        if 'baseUrl' not in request_data:
+            return jsonify({
+                "success": False,
+                "error": "Missing 'baseUrl' parameter"
+            }), 400
+        
+        post_type = request_data['postType']
+        base_url = request_data['baseUrl']
+        after_date = None
+        
+        # Handle afterDate parameter (same logic as sync endpoint)
+        if 'afterDate' in request_data:
+            try:
+                after_date_str = request_data['afterDate']
+                
+                if 'T' in after_date_str:
+                    if 'Z' in after_date_str:
+                        clean_date_str = after_date_str.replace('Z', '+00:00')
+                        date_obj = datetime.fromisoformat(clean_date_str)
+                    else:
+                        try:
+                            date_obj = datetime.strptime(after_date_str, '%Y-%m-%dT%H:%M:%S')
+                        except ValueError:
+                            try:
+                                date_obj = datetime.strptime(after_date_str, '%Y-%m-%dT%H:%M')
+                            except ValueError:
+                                if '.' in after_date_str:
+                                    date_parts = after_date_str.split('.')
+                                    date_obj = datetime.strptime(date_parts[0], '%Y-%m-%dT%H:%M:%S')
+                                else:
+                                    raise ValueError("Invalid date format")
+                else:
+                    date_obj = datetime.strptime(after_date_str, '%Y-%m-%d')
+                
+                after_date = date_obj.strftime('%Y-%m-%dT00:00:00')
+            except ValueError:
+                return jsonify({
+                    "success": False,
+                    "error": "Invalid date format for 'afterDate'. Expected format: YYYY-MM-DD, YYYY-MM-DDT00:00:00, or ISO 8601 format like 2025-04-26T21:32:52.043Z"
+                }), 400
+        
+        # Start async task
+        task = extract_wordpress_content.delay(base_url, post_type, after_date)
+        
+        # Return task information
+        return jsonify({
+            "success": True,
+            "task_id": task.id,
+            "status": "started",
+            "message": "Extraction task started. Use the task_id to check progress.",
+            "check_url": f"/extract/status/{task.id}"
+        }), 202
+        
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@app.route('/extract/status/<task_id>', methods=['GET'])
+def get_task_status(task_id):
+    """
+    Check the status of an asynchronous extraction task.
+    
+    Args:
+        task_id (str): The task ID returned by /extract/async
+    
+    Returns:
+        JSON: Task status and progress information
+    """
+    try:
+        task = celery_app.AsyncResult(task_id)
+        
+        if task.state == 'PENDING':
+            response = {
+                "success": True,
+                "task_id": task_id,
+                "state": task.state,
+                "status": "Task is waiting to be processed"
+            }
+        elif task.state == 'PROGRESS':
+            response = {
+                "success": True,
+                "task_id": task_id,
+                "state": task.state,
+                "current_page": task.info.get('current_page', 0),
+                "total_pages": task.info.get('total_pages', 'unknown'),
+                "processed_posts": task.info.get('processed_posts', 0),
+                "status": task.info.get('status', 'Processing...')
+            }
+        elif task.state == 'SUCCESS':
+            response = {
+                "success": True,
+                "task_id": task_id,
+                "state": task.state,
+                "result": task.result,
+                "status": "Task completed successfully"
+            }
+        else:  # FAILURE
+            response = {
+                "success": False,
+                "task_id": task_id,
+                "state": task.state,
+                "error": str(task.info),
+                "status": "Task failed"
+            }
+        
+        return jsonify(response)
+        
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+def create_app():
+    """Application factory function for production deployment."""
+    return app
+
 if __name__ == '__main__':
     # Run the Flask application in debug mode when executed directly
+    # This is only for development - use Gunicorn for production
     app.run(debug=True, host='0.0.0.0', port=5000)
-

@@ -1,0 +1,29 @@
+{
+  "name": "WordPress Extractor API",
+  "description": "Flask API for extracting WordPress content via REST API",
+  "type": "application",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".",
+    "args": {}
+  },
+  "deploy": {
+    "port": 5000,
+    "healthcheck": {
+      "path": "/health",
+      "interval": 30,
+      "timeout": 10,
+      "retries": 3
+    }
+  },
+  "environment": {
+    "FLASK_ENV": "production",
+    "PYTHONUNBUFFERED": "1"
+  },
+  "domains": [],
+  "volumes": [],
+  "labels": {
+    "traefik.enable": "true",
+    "traefik.http.services.wp-extractor.loadbalancer.server.port": "5000"
+  }
+}
