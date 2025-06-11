@@ -35,5 +35,7 @@ EXPOSE 5000
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:5000/health || exit 1
 
-# Default command runs gunicorn (can be overridden for celery worker)
-CMD ["gunicorn", "--config", "gunicorn.conf.py", "main:app"]
+# Conditional command based on SERVICE_TYPE environment variable
+# If SERVICE_TYPE=worker, start Celery worker
+# Otherwise, start Gunicorn (Flask API)
+CMD ["sh", "-c", "if [ \"$SERVICE_TYPE\" = \"worker\" ]; then celery -A celery_app worker --loglevel=info --concurrency=2; else gunicorn --config gunicorn.conf.py main:app; fi"]

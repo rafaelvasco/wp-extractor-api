@@ -1,106 +1,113 @@
 # WordPress Content Extractor API
 
-Extracts all Posts of a type from a WordPress Website via REST API.
+Extracts all Posts of a type from a WordPress Website via REST API with support for long-running requests through asynchronous processing.
 
 ## Stack
 
 - Flask
 - BeautifulSoup
 - Gunicorn (Production WSGI Server)
+- Celery (Async Task Processing)
+- Redis (Message Broker)
 
-## Installation
-
-1. Clone the repository
-2. Create a virtual environment:
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
-3. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-## Usage
+## Quick Start
 
 ### Development Mode
-
-For development and testing:
 
 ```bash
 python main.py
 ```
 
-This runs the Flask development server on `http://localhost:5000`
-
-### Production Mode
-
-For production deployment, use Gunicorn WSGI server:
-
-#### Option 1: Using the startup script
+### Production Mode with Async Support
 
 ```bash
-./start_production.sh
+# Using Docker Compose (recommended)
+docker-compose up -d
+
+# Or using the startup script
+./start_async_dev.sh
 ```
-
-#### Option 2: Direct Gunicorn command
-
-```bash
-gunicorn --config gunicorn.conf.py main:app
-```
-
-#### Option 3: Custom Gunicorn configuration
-
-```bash
-gunicorn --bind 0.0.0.0:5000 --workers 4 main:app
-```
-
-### System Service (Linux)
-
-To run as a system service:
-
-1. Edit `wp-extractor-api.service` and update the paths:
-
-   - `WorkingDirectory`: Path to your project directory
-   - `Environment`: Path to your virtual environment
-   - `ExecStart`: Path to gunicorn in your virtual environment
-
-2. Copy the service file:
-
-   ```bash
-   sudo cp wp-extractor-api.service /etc/systemd/system/
-   ```
-
-3. Enable and start the service:
-
-   ```bash
-   sudo systemctl daemon-reload
-   sudo systemctl enable wp-extractor-api
-   sudo systemctl start wp-extractor-api
-   ```
-
-4. Check service status:
-   ```bash
-   sudo systemctl status wp-extractor-api
-   ```
 
 ## API Endpoints
 
-### POST /extract
+### Synchronous (for small extractions)
 
-Extracts WordPress content based on the specified post type.
+- `POST /extract` - Extract content synchronously
 
-**Request Body:**
+### Asynchronous (for large extractions, 100+ seconds)
+
+- `POST /extract/async` - Start async extraction task
+- `GET /extract/status/<task_id>` - Check task progress
+
+### Health & Debug
+
+- `GET /health` - Health check
+- `GET /debug/redis` - Test Redis connection
+- `GET /debug/celery` - Check worker status
+
+## Example Usage
+
+### Async Extraction (Recommended for large sites)
+
+```bash
+# Start extraction
+curl -X POST https://your-domain.com/extract/async \
+  -H "Content-Type: application/json" \
+  -d '{
+    "baseUrl": "https://large-wordpress-site.com",
+    "postType": "posts"
+  }'
+
+# Check progress
+curl https://your-domain.com/extract/status/[task-id]
+```
+
+## Deployment
+
+For complete deployment instructions including Coolify setup, troubleshooting, and configuration, see:
+
+**📖 [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)**
+
+The deployment guide covers:
+
+- Coolify deployment steps
+- Environment variable configuration
+- Redis and Celery worker setup
+- Troubleshooting common issues
+- Performance optimization
+- Monitoring and debugging
+
+## Key Features
+
+- ✅ **No timeout issues** - Handles extractions taking 100+ seconds
+- ✅ **Real-time progress** tracking for async tasks
+- ✅ **Scalable** worker processes
+- ✅ **Production-ready** with monitoring
+- ✅ **Backward compatible** - sync endpoint still available
+- ✅ **Containerized** deployment with Docker
+- ✅ **Coolify ready** with comprehensive setup guide
+
+## Architecture
+
+```
+[Client] → [Flask API] → [Redis] → [Celery Worker]
+              ↓                        ↓
+       [Returns task_id]        [Processes task]
+              ↓                        ↓
+       [Client polls status]    [Stores results]
+```
+
+## Request Format
 
 ```json
 {
   "baseUrl": "https://example.com",
   "postType": "posts",
-  "afterDate": "2024-01-01T00:00:00" // Optional
+  "afterDate": "2024-01-01T00:00:00"
 }
 ```
 
-**Response:**
+## Response Format
 
 ```json
 {
@@ -117,93 +124,4 @@ Extracts WordPress content based on the specified post type.
 }
 ```
 
-## Configuration
-
-### Gunicorn Configuration
-
-The `gunicorn.conf.py` file contains production-ready settings:
-
-- 4 worker processes
-- Timeout settings
-- Logging configuration
-- Performance optimizations
-
-You can modify these settings based on your server resources and requirements.
-
-## Deployment on Coolify
-
-Coolify is a self-hosted platform that simplifies application deployment. Here's how to deploy this API on Coolify:
-
-### Prerequisites
-
-- A running Coolify instance
-- Git repository with your code
-- Domain name (optional, but recommended)
-
-### Deployment Steps
-
-1. **Push your code to a Git repository** (GitHub, GitLab, etc.)
-
-2. **In Coolify Dashboard:**
-
-   - Click "New Resource" → "Application"
-   - Select your Git repository
-   - Choose the branch to deploy
-   - Set the application name (e.g., "wp-extractor-api")
-
-3. **Configure Build Settings:**
-
-   - Build Pack: Docker
-   - Dockerfile: `Dockerfile` (default)
-   - Port: `5000`
-
-4. **Environment Variables (Optional):**
-
-   - `FLASK_ENV=production`
-   - `PYTHONUNBUFFERED=1`
-
-5. **Domain Configuration:**
-
-   - Add your domain in the "Domains" section
-   - Coolify will automatically handle SSL certificates
-
-6. **Deploy:**
-   - Click "Deploy" to start the deployment
-   - Monitor the build logs in real-time
-
-### Coolify Features Used
-
-- **Automatic SSL**: Coolify handles Let's Encrypt certificates
-- **Health Checks**: Uses the `/health` endpoint for monitoring
-- **Auto-deployment**: Redeploys on Git push (if configured)
-- **Load Balancing**: Built-in Traefik reverse proxy
-
-### Local Testing with Docker
-
-Before deploying to Coolify, test locally:
-
-```bash
-# Build the Docker image
-docker build -t wp-extractor-api .
-
-# Run the container
-docker run -p 5000:5000 wp-extractor-api
-
-# Or use docker-compose
-docker-compose up
-```
-
-### Troubleshooting Coolify Deployment
-
-- Check build logs in Coolify dashboard
-- Ensure port 5000 is correctly configured
-- Verify the health check endpoint: `https://your-domain.com/health`
-- Check application logs in Coolify for runtime issues
-
-## Security Notes
-
-- The development server (`python main.py`) should never be used in production
-- Coolify provides automatic HTTPS via Let's Encrypt
-- Consider implementing rate limiting for the API endpoints
-- Use environment variables for sensitive configuration
-- Regularly update dependencies for security patches
+For detailed deployment instructions, troubleshooting, and advanced configuration, please refer to the [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md).
