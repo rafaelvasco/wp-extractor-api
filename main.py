@@ -218,11 +218,11 @@ def extract():
         base_url = request_data['baseUrl']
         after_date = None
         
-        # Check if afterDate parameter is provided
-        if 'afterDate' in request_data:
+        # Check if afterDate parameter is provided and not empty/null
+        if 'afterDate' in request_data and request_data['afterDate'] and request_data['afterDate'].strip():
             try:
                 # Parse the date to ensure it's valid
-                after_date_str = request_data['afterDate']
+                after_date_str = request_data['afterDate'].strip()
                 
                 try:
                     # Handle various date formats
@@ -335,9 +335,9 @@ def extract_async():
         after_date = None
         
         # Handle afterDate parameter (same logic as sync endpoint)
-        if 'afterDate' in request_data:
+        if 'afterDate' in request_data and request_data['afterDate'] and request_data['afterDate'].strip():
             try:
-                after_date_str = request_data['afterDate']
+                after_date_str = request_data['afterDate'].strip()
                 
                 if 'T' in after_date_str:
                     if 'Z' in after_date_str:
