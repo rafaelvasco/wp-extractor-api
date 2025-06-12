@@ -43,4 +43,4 @@ HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
 # Conditional command based on SERVICE_TYPE environment variable
 # If SERVICE_TYPE=worker, start Celery worker
 # Otherwise, start Gunicorn (Flask API)
-CMD ["sh", "-c", "if [ \"$SERVICE_TYPE\" = \"worker\" ]; then celery -A celery_app worker --loglevel=info --concurrency=2; else gunicorn --config gunicorn.conf.py main:app; fi"]
+CMD ["sh", "-c", "if [ \"$SERVICE_TYPE\" = \"worker\" ]; then celery -A celery_app worker --loglevel=info --concurrency=2 --queues=celery,extraction; else gunicorn --config gunicorn.conf.py main:app; fi"]
