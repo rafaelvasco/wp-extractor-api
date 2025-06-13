@@ -15,55 +15,10 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from celery_app import celery_app
 from tasks import extract_wordpress_content
+from html_utils import clean_html_content, clean_html_content_with_linebreaks
 
 
 # Extraction Methods ===================================================================
-
-def clean_html_content(html_content):
-  """Remove HTML tags and clean the content"""
-
-  # Create BS object
-  soup = BeautifulSoup(html_content, 'html.parser')
-
-  # Get text content
-  text = soup.get_text(separator=' ', strip=True)
-
-  # Remove extra whitespace
-  text = re.sub(r'\s+', ' ', text)
-
-  # Remove special characters but keep Portuguese accents
-  text = re.sub(r'[^\w\s\u00C0-\u00FF.,!?-]', '', text)
-
-  return text.strip()
-
-
-def clean_html_content_with_linebreaks(html_content):
-    """Remove HTML tags and clean the content while preserving line breaks."""
-    # Replace <br> and </p> tags with newline characters before creating BeautifulSoup
-    html_content = html_content.replace('<br>', '\n').replace('</p>', '\n')
-
-    # Create BeautifulSoup object
-    soup = BeautifulSoup(html_content, 'html.parser')
-
-    # Get text content, using '\n' as separator for block elements
-    text = ''
-    for element in soup.descendants:
-        if isinstance(element, str):
-            text += element.strip() + ' '
-        elif element.name in ['p', 'div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li']:
-            text += '\n'
-
-    # Clean up the text
-    # Remove extra whitespace within lines
-    text = re.sub(r' +', ' ', text)
-
-    # Remove extra blank lines (more than 2 consecutive newlines)
-    text = re.sub(r'\n\s*\n\s*\n+', '\n\n', text)
-
-    # Remove special characters but keep Portuguese accents and line breaks
-    text = re.sub(r'[^\w\s\u00C0-\u00FF.,!?\n-]', '', text)
-
-    return text.strip()
 
 
 def fetch_wordpress_posts(base_url, post_type, per_page=100, page=1, after=None):
