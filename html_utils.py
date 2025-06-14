@@ -23,13 +23,16 @@ def clean_html_content(html_content):
     # Get text content
     text = soup.get_text(separator=' ', strip=True)
 
-    # Remove extra whitespace
-    text = re.sub(r'\s+', ' ', text)
-
-    # Only normalize whitespace - don't remove any characters except control characters
-    # The HTML tags are already removed by BeautifulSoup, entities are decoded by html.unescape
-    # We should preserve all legitimate text characters including parentheses, slashes, etc.
+    # Remove control characters and problematic Unicode characters first
+    # Control characters (0x00-0x1F, 0x7F)
     text = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', text)
+    
+    # Remove invisible/problematic Unicode characters that can cause display issues
+    # Zero-width spaces, joiners, marks, BOM, soft hyphens, etc.
+    text = re.sub(r'[\u200b-\u200f\u2028\u2029\ufeff\u00ad]', '', text)
+
+    # Remove extra whitespace (after removing invisible characters)
+    text = re.sub(r'\s+', ' ', text)
 
     return text.strip()
 
@@ -61,8 +64,12 @@ def clean_html_content_with_linebreaks(html_content):
     # Remove extra blank lines (more than 2 consecutive newlines)
     text = re.sub(r'\n\s*\n\s*\n+', '\n\n', text)
 
-    # Only remove control characters - preserve all legitimate text including parentheses, slashes, etc.
-    # The HTML tags are already removed by BeautifulSoup, entities are decoded by html.unescape
+    # Remove control characters and problematic Unicode characters
+    # Control characters (0x00-0x1F, 0x7F)
     text = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', text)
+    
+    # Remove invisible/problematic Unicode characters that can cause display issues
+    # Zero-width spaces, joiners, marks, BOM, soft hyphens, etc.
+    text = re.sub(r'[\u200b-\u200f\u2028\u2029\ufeff\u00ad]', '', text)
 
     return text.strip()

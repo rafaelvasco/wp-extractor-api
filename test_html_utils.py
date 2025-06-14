@@ -171,6 +171,44 @@ class TestHtmlUtilsSimple(unittest.TestCase):
         self.assertIn("Posse de material", result)
         self.assertIn("www.exemplo.com", result)
 
+    def test_invisible_character_removal(self):
+        """Test that invisible Unicode characters are properly removed."""
+        # Test zero-width space
+        input_text = "Text with &#8203; zero-width space"
+        result = clean_html_content(input_text)
+        self.assertEqual(result, "Text with zero-width space")
+        self.assertNotIn("\u200b", result)  # Zero-width space should be gone
+        
+        # Test multiple invisible characters
+        input_text = "Text with&#8203;&#8204;&#8205;multiple invisible chars"
+        result = clean_html_content(input_text)
+        self.assertEqual(result, "Text withmultiple invisible chars")
+        
+        # Test byte order mark
+        input_text = "Text with &#65279; BOM"
+        result = clean_html_content(input_text)
+        self.assertEqual(result, "Text with BOM")
+        self.assertNotIn("\ufeff", result)  # BOM should be gone
+        
+        # Test soft hyphen
+        input_text = "Text with &#173; soft hyphen"
+        result = clean_html_content(input_text)
+        self.assertEqual(result, "Text with soft hyphen")
+        self.assertNotIn("\u00ad", result)  # Soft hyphen should be gone
+
+    def test_no_double_spaces_after_invisible_removal(self):
+        """Test that removing invisible characters doesn't create double spaces."""
+        input_text = "Word1 &#8203; Word2"  # Space + invisible + space
+        result = clean_html_content(input_text)
+        self.assertEqual(result, "Word1 Word2")
+        self.assertNotIn("  ", result)  # No double spaces
+        
+        # Test with HTML tags and invisible characters
+        input_text = "<p>Word1 &#8203; Word2</p>"
+        result = clean_html_content(input_text)
+        self.assertEqual(result, "Word1 Word2")
+        self.assertNotIn("  ", result)  # No double spaces
+
 
 if __name__ == '__main__':
     # Run the tests
