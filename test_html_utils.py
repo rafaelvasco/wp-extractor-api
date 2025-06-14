@@ -118,6 +118,37 @@ class TestHtmlUtilsSimple(unittest.TestCase):
         self.assertIn("-", result)  # Regular hyphen
         self.assertIn("–", result)  # Em dash from entity
 
+    def test_parentheses_and_slashes_preservation(self):
+        """Test that parentheses and slashes are preserved - the new reported issue."""
+        input_text = "A Lei Antifeminicídio (Lei n. 14.994/2024) e os efeitos da condenação no Direito Penal Militar"
+        expected = "A Lei Antifeminicídio (Lei n. 14.994/2024) e os efeitos da condenação no Direito Penal Militar"
+        result = clean_html_content(input_text)
+        self.assertEqual(result, expected)
+        
+        # Test with HTML tags too
+        input_with_tags = "<p>A Lei Antifeminicídio (Lei n. 14.994/2024) e os efeitos</p>"
+        expected_with_tags = "A Lei Antifeminicídio (Lei n. 14.994/2024) e os efeitos"
+        result_with_tags = clean_html_content(input_with_tags)
+        self.assertEqual(result_with_tags, expected_with_tags)
+
+    def test_various_punctuation_preservation(self):
+        """Test that various punctuation marks are preserved."""
+        input_text = "Test (parentheses) [brackets] {braces} /slash/ \\backslash\\ @symbol #hash %percent"
+        result = clean_html_content(input_text)
+        
+        # All these should be preserved
+        self.assertIn("(", result)
+        self.assertIn(")", result)
+        self.assertIn("[", result)
+        self.assertIn("]", result)
+        self.assertIn("{", result)
+        self.assertIn("}", result)
+        self.assertIn("/", result)
+        self.assertIn("\\", result)
+        self.assertIn("@", result)
+        self.assertIn("#", result)
+        self.assertIn("%", result)
+
     def test_real_world_wordpress_example(self):
         """Test with the exact real-world WordPress example from the issue."""
         wordpress_content = """

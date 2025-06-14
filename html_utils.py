@@ -26,10 +26,10 @@ def clean_html_content(html_content):
     # Remove extra whitespace
     text = re.sub(r'\s+', ' ', text)
 
-    # Remove special characters but keep Portuguese accents and common punctuation
-    # Updated regex to include em dash (–) and other common punctuation, quotes, symbols
-    # Include Unicode smart quotes and apostrophes: \u2018-\u201F
-    text = re.sub(r'[^\w\s\u00C0-\u00FF\u2018-\u201F.,!?\-–—"\'&$€<>:]', '', text)
+    # Only normalize whitespace - don't remove any characters except control characters
+    # The HTML tags are already removed by BeautifulSoup, entities are decoded by html.unescape
+    # We should preserve all legitimate text characters including parentheses, slashes, etc.
+    text = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', text)
 
     return text.strip()
 
@@ -61,9 +61,8 @@ def clean_html_content_with_linebreaks(html_content):
     # Remove extra blank lines (more than 2 consecutive newlines)
     text = re.sub(r'\n\s*\n\s*\n+', '\n\n', text)
 
-    # Remove special characters but keep Portuguese accents, line breaks, and common punctuation
-    # Updated regex to include em dash (–) and other common punctuation, quotes, symbols
-    # Include Unicode smart quotes and apostrophes: \u2018-\u201F
-    text = re.sub(r'[^\w\s\u00C0-\u00FF\u2018-\u201F.,!?\n\-–—"\'&$€<>:]', '', text)
+    # Only remove control characters - preserve all legitimate text including parentheses, slashes, etc.
+    # The HTML tags are already removed by BeautifulSoup, entities are decoded by html.unescape
+    text = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', text)
 
     return text.strip()
